@@ -41,6 +41,10 @@ router.post('/login', async (ctx, next) => {
       return;
     }
 
+    if (user.isNotConfirmedEmail()) {
+      ctx.throw(400, 'Подтвердите email');
+    }
+
     const token = uuid();
 
     ctx.body = {token};
@@ -77,12 +81,35 @@ router.post('/oauth_callback', handleMongooseValidationError, async (ctx, next) 
   })(ctx, next);
 });
 
-router.post('/register', async (ctx, next) => {
+router.post('/register', handleMongooseValidationError, async (ctx, next) => {
+  const verificationToken = uuid();
 
+  const newUser = new User(ctx.request.body);
+  newUser.verificationToken = verificationToken;
+  await newUser.setPassword(ctx.request.body.password);
+  await newUser.save();
+
+  await sendMail({
+    template: 'confirmation',
+    to: ctx.request.body.email,
+    subject: 'Подтверждение почты',
+    locals: {token: verificationToken},
+  });
+
+  ctx.body = {status: 'ok'};
 });
 
 router.post('/confirm', async (ctx) => {
+  const user = await User.findOneAndUpdate(
+      {verificationToken: ctx.request.body.verificationToken},
+      {$unset: {verificationToken: ctx.request.body.verificationToken}}
+  );
 
+  if (!user) {
+    ctx.throw(400, 'Ссылка подтверждения недействительна или устарела');
+  }
+
+  ctx.body = {token: user.verificationToken};
 });
 
 app.use(router.routes());

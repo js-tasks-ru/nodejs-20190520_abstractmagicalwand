@@ -61,4 +61,8 @@ userSchema.methods.checkPassword = async function(password) {
   return hash === this.passwordHash;
 };
 
+userSchema.methods.isNotConfirmedEmail = function() {
+  return !!this.verificationToken;
+};
+
 module.exports = connection.model('User', userSchema);
